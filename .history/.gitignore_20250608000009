@@ -25,7 +25,4 @@ dist-ssr
 .env
 
 # Project specific
-
-
-# Environment variables
-!.env.example
+gemini/
