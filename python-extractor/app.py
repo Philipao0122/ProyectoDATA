@@ -13,6 +13,9 @@ import pytesseract
 from werkzeug.serving import WSGIRequestHandler
 import tempfile
 from datetime import datetime
+import subprocess
+import json
+from pathlib import Path
 
 # Configure CORS
 cors = CORS()
@@ -303,6 +306,85 @@ def extract_text():
         return jsonify({
             'success': False,
             'error': f'Error al procesar la imagen: {str(e)}'
+        }), 500
+
+@app.route('/analyze-texts', methods=['POST'])
+def analyze_texts():
+    try:
+        # Ensure the text file exists
+        if not os.path.exists(text_file_path):
+            return jsonify({
+                'success': False,
+                'error': 'No hay textos extraídos para analizar'
+            }), 400
+            
+        # Check if file has content (more than just the header)
+        with open(text_file_path, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            
+        if len(content) <= 50:  # Just the header or empty
+            return jsonify({
+                'success': False,
+                'error': 'No hay suficiente texto para analizar'
+            }), 400
+        
+        # Get the path to the Gemini script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(current_dir)
+        gemini_script_path = os.path.join(project_dir, 'gemini', 'inputTxt.py')
+        
+        # Ensure the extracted_texts.txt file is copied to the gemini directory
+        gemini_text_path = os.path.join(project_dir, 'gemini', 'extracted_texts.txt')
+        
+        # Copy the extracted text file to the gemini directory
+        with open(text_file_path, 'r', encoding='utf-8') as src_file:
+            text_content = src_file.read()
+            
+        with open(gemini_text_path, 'w', encoding='utf-8') as dest_file:
+            dest_file.write(text_content)
+        
+        logger.info(f'Running Gemini analysis script at: {gemini_script_path}')
+        
+        # Run the Gemini script
+        try:
+            # Use subprocess to run the Python script
+            result = subprocess.run(
+                [sys.executable, gemini_script_path],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            # Get the output from the script
+            output = result.stdout
+            
+            # Extract the analysis part from the output
+            analysis_start = output.find("Respuesta del modelo:")
+            if analysis_start != -1:
+                analysis_text = output[analysis_start:]
+            else:
+                analysis_text = output
+                
+            logger.info(f'Gemini analysis completed successfully')
+            
+            return jsonify({
+                'success': True,
+                'analysis': analysis_text
+            })
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f'Error running Gemini script: {str(e)}')
+            logger.error(f'Script stderr: {e.stderr}')
+            return jsonify({
+                'success': False,
+                'error': f'Error al ejecutar el análisis: {e.stderr}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f'Error analyzing texts: {str(e)}', exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': f'Error al analizar los textos: {str(e)}'
         }), 500
 
 @app.route('/download-texts')

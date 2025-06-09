@@ -11,6 +11,7 @@ interface ImageItem {
   extractedText?: string;
   processing?: boolean;
   error?: string;
+  analysis?: string;
 }
 
 interface ApiResponse {
@@ -38,6 +39,7 @@ export default function ImageExtractor() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Load saved images from localStorage on component mount
   useEffect(() => {
@@ -57,26 +59,22 @@ export default function ImageExtractor() {
     }
   }, []);
 
-  const extractTextFromImages = async () => {
-    if (isExtracting) return;
+  // Unified function to extract text and analyze with Gemini
+  const contrastImages = async () => {
+    if (isExtracting || isAnalyzing) return;
     
-    console.log('Starting text extraction for all images...');
+    console.log('Starting unified contrast flow...');
     setIsExtracting(true);
     setError('');
     
     const updatedImages = [...images];
     let hasChanges = false;
 
+    // Step 1: Extract text from images
     for (let i = 0; i < updatedImages.length; i++) {
       const img = updatedImages[i];
       console.log(`Processing image ${i + 1}/${updatedImages.length}`);
       
-      // Skip if already processed or has an error
-      if (img.extractedText !== undefined || img.error) {
-        console.log(`Image ${i + 1} already processed, skipping`);
-        continue;
-      }
-
       try {
         // Mark as processing
         updatedImages[i] = { ...img, processing: true, error: undefined };
@@ -123,11 +121,51 @@ export default function ImageExtractor() {
     if (!hasChanges) {
       console.log('No new images to process');
       setError('No hay imágenes nuevas para procesar');
-    } else {
-      console.log('Finished processing all images');
+      setIsExtracting(false);
+      return;
     }
     
     setIsExtracting(false);
+    
+    // Step 2: Trigger Gemini analysis
+    try {
+      setIsAnalyzing(true);
+      console.log('Starting Gemini analysis...');
+      
+      // Call a new endpoint that will trigger the Gemini analysis
+      interface AnalyzeTextsResponse {
+        success: boolean;
+        analysis?: string;
+        error?: string;
+      }
+      
+      const response = await axios.post<AnalyzeTextsResponse>('http://localhost:5000/analyze-texts');
+      
+      if (response.data.success) {
+        console.log('Gemini analysis completed successfully');
+        
+        // If the analysis returns content, we can update the UI with it
+        if (response.data.analysis) {
+          // Store the analysis in state or display it
+          const updatedImagesWithAnalysis = updatedImages.map(img => ({
+            ...img,
+            analysis: response.data.analysis
+          }));
+          
+          setImages(updatedImagesWithAnalysis);
+          localStorage.setItem('savedInstagramImages', JSON.stringify(updatedImagesWithAnalysis));
+        }
+      } else {
+        throw new Error(response.data.error || 'Error en el análisis de Gemini');
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido en el análisis';
+      console.error('Error during Gemini analysis:', errorMessage);
+      setError(`Error en el análisis: ${errorMessage}`);
+    } finally {
+      setIsAnalyzing(false);
+      console.log('Unified contrast flow completed');
+    }
   };
 
   const handleExtract = async () => {
@@ -189,16 +227,15 @@ export default function ImageExtractor() {
           </div>
           <div>
             <button
-              onClick={extractTextFromImages}
-              disabled={!images.length || isExtracting}
-              className={`bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 ${
-                !images.length || isExtracting ? 'opacity-50 cursor-not-allowed' : ''
+              onClick={contrastImages}
+              disabled={!images.length || isExtracting || isAnalyzing}
+              className={`bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 ${
+                !images.length || isExtracting || isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
-              {isExtracting ? 'Procesando...' : 'Obtener Data'}
+              {isExtracting ? 'Extrayendo texto...' : isAnalyzing ? 'Analizando...' : 'Contrastar'}
             </button>
-            <p className="text-sm text-gray-500 mt-1">Extrae texto de todas las imágenes</p>
-
+            <p className="text-sm text-gray-500 mt-1">Extrae texto y analiza con Gemini</p>
           </div>
         </div>
         {error && <p className="text-red-500 mt-2">{error}</p>}
@@ -246,6 +283,17 @@ export default function ImageExtractor() {
                     </div>
                   )}
                   
+                  {/* Analysis Preview */}
+                  {img.analysis && (
+                    <div className="bg-purple-800 bg-opacity-80 text-white text-xs p-2 rounded max-h-20 overflow-y-auto mt-1">
+                      <p className="break-words">
+                        {img.analysis.length > 100 
+                          ? `${img.analysis.substring(0, 100)}...` 
+                          : img.analysis}
+                      </p>
+                    </div>
+                  )}
+                  
                   {/* Error Message */}
                   {img.error && (
                     <div className="bg-red-600 bg-opacity-80 text-white text-xs p-2 rounded">
@@ -258,6 +306,14 @@ export default function ImageExtractor() {
                     <div className="bg-blue-600 bg-opacity-80 text-white text-xs p-2 rounded flex items-center">
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
                       Procesando...
+                    </div>
+                  )}
+                  
+                  {/* Analyzing Indicator */}
+                  {isAnalyzing && (
+                    <div className="bg-purple-600 bg-opacity-80 text-white text-xs p-2 rounded flex items-center mt-1">
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                      Analizando con Gemini...
                     </div>
                   )}
                 </div>

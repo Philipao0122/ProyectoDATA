@@ -25,7 +25,8 @@ dist-ssr
 .env
 
 # Project specific
-
+history/
+bolt/
 
 # Environment variables
 !.env.example
