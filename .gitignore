@@ -30,6 +30,7 @@ dist-ssr
 .history
 
 bolt/
+python-extractor/temp/
 
 # Environment variables
 !.env.example

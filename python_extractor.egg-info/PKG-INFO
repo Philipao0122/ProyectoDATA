@@ -1,0 +1,13 @@
+Metadata-Version: 2.2
+Name: python-extractor
+Version: 0.1
+Requires-Python: >=3.6
+Requires-Dist: flask
+Requires-Dist: flask-cors
+Requires-Dist: pillow
+Requires-Dist: pytesseract
+Requires-Dist: selenium
+Requires-Dist: requests
+Requires-Dist: python-dotenv
+Dynamic: requires-dist
+Dynamic: requires-python
