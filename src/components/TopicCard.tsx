@@ -1,31 +1,25 @@
 import React, { useState } from 'react';
-import { Eye, Download, MessageSquare, Share2, Bookmark, ChevronDown, ChevronUp } from 'lucide-react';
+import { Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Topic } from '../types';
 
 interface TopicCardProps {
   topic: Topic;
   isDarkMode: boolean;
+  onViewClick: (e: React.MouseEvent) => void;
 }
 
-const TopicCard: React.FC<TopicCardProps> = ({ topic, isDarkMode }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState('explore');
-  const [isSaved, setIsSaved] = useState(false);
+const TopicCard: React.FC<TopicCardProps> = ({ topic, isDarkMode, onViewClick }) => {
+  const [expanded] = useState(false);
+  const [activeTab] = useState('explore');
+  const navigate = useNavigate();
 
-  const handleQuickView = () => {
-    // Implementar vista rápida
-    console.log('Quick view clicked');
+  const handleViewClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onViewClick(e);
+    navigate(`/topic/${topic.id}`);
   };
 
-  const handleDownload = () => {
-    // Implementar descarga
-    console.log('Download clicked');
-  };
-
-  const handleComment = () => {
-    setExpanded(true);
-    setActiveTab('consult');
-  };
 
   return (
     <div 
@@ -57,49 +51,28 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, isDarkMode }) => {
       {expanded && (
         <div className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
           <div className="flex">
-            <button
-              className={`flex-1 px-4 py-3 text-center text-sm font-medium transition-colors ${
-                activeTab === 'explore'
-                  ? isDarkMode 
-                    ? 'border-b-2 border-blue-500 text-blue-400'
-                    : 'border-b-2 border-blue-500 text-blue-600'
-                  : isDarkMode
-                    ? 'text-gray-400 hover:text-gray-300'
-                    : 'text-gray-600 hover:text-gray-900'
-              }`}
-              onClick={() => setActiveTab('explore')}
-            >
+          <div className={`flex-1 px-4 py-3 text-center text-sm font-medium ${
+              activeTab === 'explore' 
+                ? isDarkMode ? 'text-blue-400' : 'text-blue-600' 
+                : isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
               EXPLORA CONCEPTOS
-            </button>
-            <button
-              className={`flex-1 px-4 py-3 text-center text-sm font-medium transition-colors ${
-                activeTab === 'visualize'
-                  ? isDarkMode 
-                    ? 'border-b-2 border-blue-500 text-blue-400'
-                    : 'border-b-2 border-blue-500 text-blue-600'
-                  : isDarkMode
-                    ? 'text-gray-400 hover:text-gray-300'
-                    : 'text-gray-600 hover:text-gray-900'
-              }`}
-              onClick={() => setActiveTab('visualize')}
-            >
-              VISUALIZA DATOS
-            </button>
-            <button
-              className={`flex-1 px-4 py-3 text-center text-sm font-medium transition-colors ${
-                activeTab === 'consult'
-                  ? isDarkMode 
-                    ? 'border-b-2 border-blue-500 text-blue-400'
-                    : 'border-b-2 border-blue-500 text-blue-600'
-                  : isDarkMode
-                    ? 'text-gray-400 hover:text-gray-300'
-                    : 'text-gray-600 hover:text-gray-900'
-              }`}
-              onClick={() => setActiveTab('consult')}
-            >
-              CONSULTA FUENTES
-            </button>
           </div>
+          <div className={`flex-1 px-4 py-3 text-center text-sm font-medium ${
+              activeTab === 'visualize' 
+                ? isDarkMode ? 'text-blue-400' : 'text-blue-600' 
+                : isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              VISUALIZA DATOS
+          </div>
+          <div className={`flex-1 px-4 py-3 text-center text-sm font-medium ${
+              activeTab === 'consult' 
+                ? isDarkMode ? 'text-blue-400' : 'text-blue-600' 
+                : isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              CONSULTA FUENTES
+          </div>
+        </div>
 
           <div className="p-4">
             {activeTab === 'explore' && (
@@ -171,39 +144,14 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, isDarkMode }) => {
         <div className="flex items-center justify-between">
           <div className="flex space-x-4">
             <button 
-              onClick={handleQuickView}
-              className={`flex items-center gap-1 text-sm ${
-                isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
-              } transition-colors`}
+              onClick={handleViewClick}
+              className="flex items-center gap-1 text-sm text-blue-500 hover:text-blue-600 transition-colors"
             >
               <Eye size={18} />
-              <span>Vista rápida</span>
-            </button>
-            <button 
-              onClick={handleDownload}
-              className={`flex items-center gap-1 text-sm ${
-                isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
-              } transition-colors`}
-            >
-              <Download size={18} />
-              <span>Descargar</span>
-            </button>
-            <button 
-              onClick={handleComment}
-              className={`flex items-center gap-1 text-sm ${
-                isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
-              } transition-colors`}
-            >
-              <MessageSquare size={18} />
-              <span>Comentar</span>
+              <span>Ver</span>
             </button>
           </div>
-          <button 
-            onClick={() => setExpanded(!expanded)}
-            className={`flex items-center gap-1 text-sm ${
-              isDarkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'
-            } transition-colors`}
-          >
+          <div className="flex items-center gap-1 text-sm text-blue-400">
             {expanded ? (
               <>
                 <ChevronUp size={18} />
@@ -215,7 +163,7 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, isDarkMode }) => {
                 <span>Más</span>
               </>
             )}
-          </button>
+          </div>
         </div>
       </div>
     </div>

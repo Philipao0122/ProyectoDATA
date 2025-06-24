@@ -6,9 +6,10 @@ import { Globe } from 'lucide-react';
 interface FeedProps {
   topics: Topic[];
   isDarkMode: boolean;
+  onTopicView: () => void;
 }
 
-const Feed: React.FC<FeedProps> = ({ topics, isDarkMode }) => {
+const Feed: React.FC<FeedProps> = ({ topics, isDarkMode, onTopicView }) => {
   if (topics.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -26,7 +27,12 @@ const Feed: React.FC<FeedProps> = ({ topics, isDarkMode }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {topics.map((topic) => (
-        <TopicCard key={topic.id} topic={topic} isDarkMode={isDarkMode} />
+        <TopicCard 
+          key={topic.id} 
+          topic={topic} 
+          isDarkMode={isDarkMode} 
+          onViewClick={onTopicView}
+        />
       ))}
     </div>
   );

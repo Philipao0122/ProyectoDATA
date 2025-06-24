@@ -1,24 +1,19 @@
+import logging
+import os
+import sys
+import tempfile
 import traceback
-from flask import Flask, request, jsonify, send_from_directory, send_file, make_response
+from datetime import datetime
+from io import BytesIO
+
+import pytesseract
+import requests
+from flask import Flask, jsonify, make_response, request, send_file
 from flask_cors import CORS, cross_origin
 from PIL import Image
-import requests
-from io import BytesIO, StringIO
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-import time
-import os
-import logging
-import sys
-import pytesseract
 from werkzeug.serving import WSGIRequestHandler
-import tempfile
-from datetime import datetime
-import subprocess
-import json
-from pathlib import Path
-import sys
-import os
 
 # Agregar el directorio raíz del proyecto al path para poder importar el módulo inputTxt
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -28,24 +23,21 @@ if project_root not in sys.path:
 # Importar el módulo de análisis de texto
 from gemini.inputTxt import analyze_text, analyze_text_from_file
 
-# Configure CORS
-cors = CORS()
-
 def create_app():
     app = Flask(__name__)
-    cors.init_app(app)
+    
+    # Configure CORS with all necessary settings
+    CORS(app, resources={
+        r"/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type"]
+        }
+    })
+    
     return app
 
 app = create_app()
-
-# Configure CORS to allow all origins
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
-    }
-})
 
 # Configure Tesseract path (update this to your Tesseract installation path)
 if sys.platform == 'win32':
@@ -80,142 +72,160 @@ try:
 except Exception as e:
     logger.error(f'Error creating text file: {str(e)}')
 
-def save_extracted_text(text: str, image_url: str = None):
+def _write_text_to_file(filepath: str, content: str, mode: str = 'a') -> bool:
+    """Helper function to write content to a file with error handling."""
+    try:
+        with open(filepath, mode, encoding='utf-8') as f:
+            f.write(content)
+        return True
+    except Exception as e:
+        logger.error(f'Error writing to file {filepath}: {str(e)}')
+        return False
+
+def _verify_file_content(filepath: str) -> tuple[bool, list[str]]:
+    """Verify file content and extract image sources."""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+            logger.info(f'File content (first 200 chars): {content[:200]}...')
+            
+            # Extract image sources if any
+            import re
+            source_matches = re.findall(r'\[Fuente: (.*?)\]', content)
+            image_sources = list(set(source_matches))  # Remove duplicates
+            logger.info(f'Found image sources: {image_sources}')
+            
+            return True, image_sources
+    except Exception as e:
+        logger.error(f'Error verifying file content: {str(e)}')
+        return False, []
+
+def save_extracted_text(text: str, image_url: str = None) -> bool:
     """
-    Guarda el texto extraído en el archivo, incluyendo la fuente de la imagen si se proporciona.
+    Save extracted text to a file, including image source if provided.
     
     Args:
-        text: Texto extraído de la imagen
-        image_url: URL de la imagen de donde se extrajo el texto (opcional)
+        text: Text extracted from the image
+        image_url: URL of the image where the text was extracted from (optional)
+        
+    Returns:
+        bool: True if successful, False otherwise
     """
     try:
-        # 1. Asegurarse de que el directorio temporal existe
+        # Ensure temp directory exists
         os.makedirs(temp_dir, exist_ok=True)
-        logger.info(f'Directorio temporal: {temp_dir}')
-        logger.info(f'Ruta del archivo de texto: {text_file_path}')
+        logger.info(f'Temporary directory: {temp_dir}')
         
-        # 2. Guardar en la ubicación temporal local
-        with open(text_file_path, 'a', encoding='utf-8') as f:
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            entry = f'\n\n--- {timestamp} ---\n'
-            if image_url:
-                entry += f'[Fuente: {image_url}]\n\n'
-            entry += text.strip() + '\n' + '='*50 + '\n'
-            f.write(entry)
+        # Prepare text entry
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        entry = f'\n\n--- {timestamp} ---\n'
+        if image_url:
+            entry += f'[Fuente: {image_url}]\n\n'
+        entry += text.strip() + '\n' + '='*50 + '\n'
         
-        # 3. Verificar que el archivo se guardó correctamente
+        # Write to file
+        if not _write_text_to_file(text_file_path, entry):
+            return False
+            
+        # Verify the file was written
         if not os.path.exists(text_file_path):
-            logger.error(f'Error: No se pudo crear el archivo {text_file_path}')
+            logger.error(f'Error: Could not create file {text_file_path}')
             return False
             
         file_size = os.path.getsize(text_file_path)
-        logger.info(f'Texto guardado correctamente. Tamaño del archivo: {file_size} bytes')
+        logger.info(f'Text successfully saved. File size: {file_size} bytes')
         
-        # 4. Leer el contenido para verificación
-        try:
-            with open(text_file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                logger.info(f'Contenido actual del archivo (primeros 200 caracteres): {content[:200]}...')
-                
-                # Extraer fuentes de imágenes del contenido
-                import re
-                source_matches = re.findall(r'\[Fuente: (.*?)\]', content)
-                image_sources = list(set(source_matches))  # Eliminar duplicados
-                logger.info(f'Fuentes de imágenes encontradas: {image_sources}')
-                
-                return True
-                
-        except Exception as e:
-            logger.error(f'Error al verificar el archivo guardado: {str(e)}')
-            return False
-            
-    except Exception as e:
-        logger.error(f'Error en save_extracted_text: {str(e)}', exc_info=True)
+        # Verify file content
+        success, _ = _verify_file_content(text_file_path)
+        
+        # Copy to gemini directory if needed
+        if success:
+            return _copy_to_gemini_and_analyze()
         return False
+        
+    except Exception as e:
+        logger.error(f'Error in save_extracted_text: {str(e)}', exc_info=True)
+        return False
+
+def _copy_to_gemini_and_analyze() -> bool:
+    """
+    Copy the extracted text to the gemini directory and perform analysis.
     
+    Returns:
+        bool: True if successful, False otherwise
+    """
     try:
-        # 3. Crear la ruta de destino en la carpeta gemini
+        # Create gemini directory if it doesn't exist
         gemini_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'gemini'))
         os.makedirs(gemini_dir, exist_ok=True)
         gemini_text_path = os.path.join(gemini_dir, 'extracted_texts.txt')
         
-        # 4. Copiar el archivo a la carpeta gemini
+        # Copy the file to gemini directory
         import shutil
         shutil.copy2(text_file_path, gemini_text_path)
-        logger.info(f'Archivo de texto copiado a: {gemini_text_path}')
+        logger.info(f'Text file copied to: {gemini_text_path}')
         
-        # Verificar que el archivo se copió correctamente
+        # Verify the file was copied
         if not os.path.exists(gemini_text_path):
-            raise Exception(f'No se pudo copiar el archivo a {gemini_text_path}')
+            raise Exception(f'Could not copy file to {gemini_text_path}')
             
-        logger.info(f'Tamaño del archivo copiado: {os.path.getsize(gemini_text_path)} bytes')
+        logger.info(f'Copied file size: {os.path.getsize(gemini_text_path)} bytes')
         
-        # 5. Ejecutar el análisis automáticamente
-        logger.info('Iniciando análisis automático del texto...')
+        # Run analysis if needed
+        return _run_analysis(gemini_dir, gemini_text_path)
         
-        # Asegurarse de que el módulo inputTxt esté en el path
+    except Exception as e:
+        logger.error(f'Error copying to gemini directory: {str(e)}', exc_info=True)
+        return False
+
+def _run_analysis(gemini_dir: str, text_path: str) -> bool:
+    """
+    Run text analysis on the extracted text.
+    
+    Args:
+        gemini_dir: Path to the gemini directory
+        text_path: Path to the text file to analyze
+        
+    Returns:
+        bool: True if analysis was successful, False otherwise
+    """
+    try:
+        logger.info('Starting text analysis...')
+        
+        # Ensure the inputTxt module is in the path
         gemini_dir_parent = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         if gemini_dir_parent not in sys.path:
             sys.path.append(gemini_dir_parent)
         
-        logger.info(f'Buscando inputTxt en: {sys.path}')
+        logger.info(f'Looking for inputTxt in: {sys.path}')
         
         from gemini.inputTxt import analyze_text_from_file
-        logger.info('Módulo inputTxt importado correctamente')
+        logger.info('inputTxt module imported successfully')
         
-        # Llamar a la función de análisis
-        logger.info(f'Analizando archivo: {gemini_text_path}')
-        result = analyze_text_from_file(gemini_text_path)
+        # Run the analysis
+        logger.info(f'Analyzing file: {text_path}')
+        result = analyze_text_from_file(text_path)
+        logger.info(f'Analysis result: {result}')
         
-        logger.info(f'Resultado del análisis: {result}')
-        
-        try:
-            if result.get('success'):
-                # Guardar el resultado del análisis
-                analysis_path = os.path.join(gemini_dir, 'analysis_result.txt')
-                analysis_content = result.get('analysis', 'No se pudo generar el análisis')
-                
-                # Guardar el análisis en un archivo
-                with open(analysis_path, 'w', encoding='utf-8') as f:
-                    f.write(analysis_content)
-                
-                logger.info(f'Análisis guardado en: {analysis_path}')
-                logger.info(f'Tamaño del archivo de análisis: {os.path.getsize(analysis_path)} bytes')
-                
-                return {
-                    "status": "success", 
-                    "analysis_path": analysis_path,
-                    "analysis": analysis_content
-                }
-            else:
-                error_msg = result.get("error", "Error desconocido en el análisis")
-                logger.error(f'Error en el análisis: {error_msg}')
-                return {
-                    "status": "error",
-                    "message": f"Error en el análisis: {error_msg}",
-                    "details": result
-                }
-                    
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            logger.error(f'Error al ejecutar el análisis: {str(e)}\n{error_details}')
-            return {
-                "status": "error", 
-                "message": f"Error al ejecutar el análisis: {str(e)}",
-                "traceback": error_details
-            }
+        if result.get('success'):
+            # Save analysis result
+            analysis_path = os.path.join(gemini_dir, 'analysis_result.txt')
+            analysis_content = result.get('analysis', 'Could not generate analysis')
             
+            if not _write_text_to_file(analysis_path, analysis_content, 'w'):
+                return False
+                
+            logger.info(f'Analysis saved to: {analysis_path}')
+            logger.info(f'Analysis file size: {os.path.getsize(analysis_path)} bytes')
+            return True
+            
+        error_msg = result.get("error", "Unknown error in analysis")
+        logger.error(f'Analysis error: {error_msg}')
+        return False
+        
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        error_msg = f'Error al guardar el texto extraído: {str(e)}'
-        logger.error(f'{error_msg}\n{error_details}')
-        return {
-            "status": "error", 
-            "message": error_msg,
-            "traceback": error_details
-        }
+        logger.error(f'Error running analysis: {str(e)}', exc_info=True)
+        return False
 
 # CORS is already configured above
 

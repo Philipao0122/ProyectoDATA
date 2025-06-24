@@ -1,16 +1,59 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Share2, Bookmark, ThumbsUp, MessageSquare } from 'lucide-react';
+import React from 'react';
+import { ArrowLeft, Share2, Bookmark, ThumbsUp, MessageSquare, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Topic } from '../types';
+import { SectionId } from '../components/SidebarT';
 
 interface TopicDetailProps {
   topic: Topic;
-  isDarkMode: boolean;
+  isDarkMode?: boolean;
+  activeSection: SectionId;
+  onSectionChange: (section: SectionId) => void;
 }
 
-const TopicDetail: React.FC<TopicDetailProps> = ({ topic, isDarkMode }) => {
-  const [activeTab, setActiveTab] = useState('explore');
+const TopicDetail: React.FC<TopicDetailProps> = ({ 
+  topic,
+  isDarkMode = false, 
+  activeSection, 
+  onSectionChange 
+}) => {
   const navigate = useNavigate();
+  
+  // Map activeSection to the corresponding tab
+  const getTabFromSection = (section: SectionId): string => {
+    switch (section) {
+      case 'concepts':
+      case 'actors':
+      case 'tactics':
+        return 'explore';
+      case 'cases':
+        return 'visualize';
+      case 'defense':
+      case 'future':
+        return 'consult';
+      default:
+        return 'explore';
+    }
+  };
+  
+  const activeTab = getTabFromSection(activeSection);
+  
+  const handleTabChange = (tab: string) => {
+    // Map tab to the first section in that tab
+    let newSection: SectionId = 'concepts';
+    switch (tab) {
+      case 'explore':
+        newSection = 'concepts';
+        break;
+      case 'visualize':
+        newSection = 'cases';
+        break;
+      case 'consult':
+        newSection = 'defense';
+        break;
+    }
+    onSectionChange(newSection);
+  };
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
@@ -84,7 +127,7 @@ const TopicDetail: React.FC<TopicDetailProps> = ({ topic, isDarkMode }) => {
                     ? 'text-gray-400 hover:text-gray-300'
                     : 'text-gray-600 hover:text-gray-900'
               }`}
-              onClick={() => setActiveTab('explore')}
+              onClick={() => handleTabChange('explore')}
             >
               EXPLORA CONCEPTOS
             </button>
@@ -98,7 +141,7 @@ const TopicDetail: React.FC<TopicDetailProps> = ({ topic, isDarkMode }) => {
                     ? 'text-gray-400 hover:text-gray-300'
                     : 'text-gray-600 hover:text-gray-900'
               }`}
-              onClick={() => setActiveTab('visualize')}
+              onClick={() => handleTabChange('visualize')}
             >
               VISUALIZA DATOS
             </button>
@@ -112,7 +155,7 @@ const TopicDetail: React.FC<TopicDetailProps> = ({ topic, isDarkMode }) => {
                     ? 'text-gray-400 hover:text-gray-300'
                     : 'text-gray-600 hover:text-gray-900'
               }`}
-              onClick={() => setActiveTab('consult')}
+              onClick={() => handleTabChange('consult')}
             >
               CONSULTA FUENTES
             </button>
