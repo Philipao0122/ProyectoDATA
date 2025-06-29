@@ -1,13 +1,18 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Sidebar from './components/Sidebar';
-import { Sidebar as SidebarT, SectionId } from './components/SidebarT';
-import Header from './components/Header';
-import Feed from './components/Feed';
+import { 
+  Sidebar, 
+  SidebarT, 
+  Header, 
+  Feed, 
+  LoadingSpinner,
+  SectionId 
+} from './components';
 import TopicDetail from './pages/TopicDetail';
 import ImageExtractor from './pages/imageExtractor';
-import { topics } from './data/topics';
 import { faculties } from './data/faculties';
+import { topicService } from './services/api';
+import type { Topic } from './types';
 
 function App() {
   const [selectedFaculty, setSelectedFaculty] = useState('all');
@@ -15,9 +20,48 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>('concepts');
   const [showTopicSidebar, setShowTopicSidebar] = useState(false);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSectionChange = useCallback((section: SectionId) => {
     setActiveSection(section);
+  }, []);
+
+  // Cargar temas al montar el componente
+  useEffect(() => {
+    console.group('App - useEffect');
+    console.log('Iniciando carga de temas...');
+    
+    const loadTopics = async () => {
+      try {
+        setIsLoading(true);
+        console.log('Llamando a topicService.getAllTopics()');
+        const data = await topicService.getAllTopics();
+        
+        console.log('Datos recibidos:', data);
+        const topicsData = Array.isArray(data) ? data : [];
+        console.log('Temas a mostrar:', topicsData.length);
+        
+        setTopics(topicsData);
+        setError(null);
+        console.log('Estado actualizado correctamente');
+      } catch (err) {
+        console.error('Error en la carga de temas:', err);
+        setError('Error al cargar los temas. Por favor, inténtalo de nuevo más tarde.');
+      } finally {
+        console.log('Finalizando carga de temas');
+        setIsLoading(false);
+        console.groupEnd();
+      }
+    };
+
+    loadTopics();
+    
+    // Limpieza
+    return () => {
+      console.log('Limpieza del efecto de carga de temas');
+    };
   }, []);
 
   const handleTopicView = useCallback(() => {
@@ -30,7 +74,7 @@ function App() {
   // }, []);
 
   const filteredTopics = topics.filter(topic => 
-    (selectedFaculty === 'all' || topic.faculty === selectedFaculty) &&
+    (selectedFaculty === 'all' || topic.faculty.name === selectedFaculty) &&
     (searchQuery === '' || 
       topic.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       topic.description.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -63,11 +107,27 @@ function App() {
                   />
                 )}
                 <main className="flex-1 overflow-y-auto p-4 md:p-6">
-                  <Feed 
-                    topics={filteredTopics} 
-                    isDarkMode={isDarkMode}
-                    onTopicView={handleTopicView}
-                  />
+                  {isLoading ? (
+                    <div className="flex justify-center items-center h-64">
+                      <LoadingSpinner />
+                    </div>
+                  ) : error ? (
+                    <div className="text-center py-10 text-red-500">
+                      <p>{error}</p>
+                      <button 
+                        onClick={() => window.location.reload()}
+                        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                      >
+                        Reintentar
+                      </button>
+                    </div>
+                  ) : (
+                    <Feed 
+                      topics={filteredTopics} 
+                      isDarkMode={isDarkMode}
+                      onTopicView={handleTopicView}
+                    />
+                  )}
                 </main>
               </div>
             </>

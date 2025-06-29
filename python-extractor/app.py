@@ -1,10 +1,13 @@
 import logging
 import os
+import re
 import sys
 import tempfile
+import time
 import traceback
 from datetime import datetime
 from io import BytesIO
+from typing import Optional
 
 import pytesseract
 import requests
@@ -71,6 +74,63 @@ try:
             f.write('Archivo de textos extraídos\n' + '=' * 30 + '\n\n')
 except Exception as e:
     logger.error(f'Error creating text file: {str(e)}')
+
+def clean_ocr_text(text: str) -> str:
+    """
+    Clean and normalize text extracted from OCR.
+    
+    Args:
+        text: Raw text extracted from OCR
+        
+    Returns:
+        str: Cleaned and normalized text
+    """
+    if not text:
+        return ""
+        
+    # Common OCR artifacts and their replacements
+    replacements = {
+        r'\|': 'I',  # Replace | with I
+        r'\|\|+': 'I',  # Replace multiple || with I
+        r'\b1\b': 'I',  # Replace standalone 1 with I
+        r'\b1(\w)': r'I\1',  # Replace 1 at start of words with I
+        r'\b\w\|': lambda m: m.group(0)[0] + 'I',  # Replace | at end of single-letter words with I
+        r'\s+': ' ',  # Replace multiple whitespace with single space
+        r'\s+([.,;:!?])': r'\1',  # Remove space before punctuation
+        r'§': 's',  # Replace § with s
+        r'\bwoe\b': 'con',  # Common OCR error for 'con'
+        r'\b\w{1,2}\b\s*': '',  # Remove single or double character words (likely noise)
+        r'\[\^\w\s]': '',  # Remove special characters except letters, numbers, and basic punctuation
+        r'\s+': ' ',  # Normalize spaces again after replacements
+    }
+    
+    # Apply replacements
+    for pattern, replacement in replacements.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Fix common word errors
+    common_errors = {
+        r'\bELTIEMPO\b': 'EL TIEMPO',
+        r'\bMod"\s*Chi\b': 'Modo de',
+        r'\bsellan\s*\'\s*acuerdo\b': 'selló un acuerdo',
+        r'\baranceles\s*@': 'aranceles',
+        r'\bBice\b': 'Biden',
+        r'\bUnidos\s*s\b': 'Unidos y',
+    }
+    
+    for error, correction in common_errors.items():
+        text = re.sub(error, correction, text, flags=re.IGNORECASE)
+    
+    # Capitalize first letter of sentences
+    sentences = re.split(r'([.!?]\s*)', text)
+    text = ''
+    for i in range(0, len(sentences)-1, 2):
+        if i+1 < len(sentences):
+            text += sentences[i].capitalize() + sentences[i+1]
+        else:
+            text += sentences[i].capitalize()
+    
+    return text.strip()
 
 def _write_text_to_file(filepath: str, content: str, mode: str = 'a') -> bool:
     """Helper function to write content to a file with error handling."""
@@ -457,7 +517,7 @@ def extract_text():
                 text = pytesseract.image_to_string(img, lang='spa+eng', config=custom_config)
                 
                 # Clean up the extracted text
-                text = text.strip()
+                text = clean_ocr_text(text)
                 
                 if text:
                     logger.info(f'Successfully extracted text: {text[:100]}...')
@@ -471,7 +531,6 @@ def extract_text():
                     raise
                 
                 # Wait before retry
-                import time
                 time.sleep(1)
         
         if not text.strip():

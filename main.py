@@ -11,6 +11,7 @@ Opciones:
     --all       Ejecuta extracción y análisis (por defecto)
 """
 import os
+import time
 import sys
 import time
 import argparse

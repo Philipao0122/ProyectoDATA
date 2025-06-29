@@ -10,7 +10,19 @@ interface FeedProps {
 }
 
 const Feed: React.FC<FeedProps> = ({ topics, isDarkMode, onTopicView }) => {
+  // Efecto para loggear cuando cambian los temas
+  React.useEffect(() => {
+    console.group('Feed - Topics actualizados');
+    console.log('Número de temas recibidos:', topics.length);
+    console.log('Modo oscuro:', isDarkMode ? 'Activado' : 'Desactivado');
+    console.groupEnd();
+  }, [topics, isDarkMode]);
+
+  // Loggear el renderizado
+  console.log('Renderizando Feed con', topics.length, 'temas');
+
   if (topics.length === 0) {
+    console.log('No hay temas para mostrar');
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <div className={`p-4 rounded-full ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'} mb-4`}>
@@ -24,8 +36,12 @@ const Feed: React.FC<FeedProps> = ({ topics, isDarkMode, onTopicView }) => {
     );
   }
 
+  console.log('Renderizando la cuadrícula de temas');
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div 
+      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+      data-testid="topics-grid"
+    >
       {topics.map((topic) => (
         <TopicCard 
           key={topic.id} 
